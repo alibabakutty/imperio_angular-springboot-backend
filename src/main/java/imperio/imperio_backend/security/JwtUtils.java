@@ -58,24 +58,24 @@ public class JwtUtils {
         return ResponseCookie.from(jwtCookie, null).path("/api").build();
     }
 
-    public static boolean validateJwtToken(String authToken) {
+    public boolean validateJwtToken(String authToken) {
         try {
             Jwts.parserBuilder()
                     .setSigningKey(getSigningKey())
                     .build()
-                    .parseClaimsJwt(authToken);
-
+                    .parseClaimsJws(authToken); // MUST BE parseClaimsJws
             return true;
-        } catch (JwtException | IllegalArgumentException e) {
+        } catch (Exception e) {
+            System.out.println("JWT Validation Error: " + e.getMessage());
             return false;
         }
     }
 
-    public static String getUserNameFromJwtToken(String token) {
+    public String getUserNameFromJwtToken(String token) {
         return Jwts.parserBuilder()
                 .setSigningKey(getSigningKey())
                 .build()
-                .parseClaimsJwt(token)
+                .parseClaimsJws(token) // MUST BE parseClaimsJws
                 .getBody()
                 .getSubject();
     }
