@@ -5,6 +5,7 @@ import imperio.imperio_backend.exception.invalidCredentialsException.InvalidCred
 import imperio.imperio_backend.exception.userNotFoundException.UserNotFoundException;
 import imperio.imperio_backend.login.dto.LoginDTO;
 import imperio.imperio_backend.login.dto.UserProfileDTO;
+import imperio.imperio_backend.login.mapper.LoginMapper;
 import imperio.imperio_backend.login.module.LoginModule;
 import imperio.imperio_backend.login.repository.LoginRepository;
 import imperio.imperio_backend.login.service.LoginService;
@@ -28,7 +29,7 @@ public class LoginServiceImpl implements LoginService {
     private final JwtUtils jwtUtils;
     private final LoginRepository loginRepository;
     private final PasswordEncoder passwordEncoder;
-
+    private final LoginMapper loginMapper;
 
     @Override
     public ResponseEntity<Map<String, Object>> login(LoginDTO loginDTO) {
@@ -65,11 +66,14 @@ public class LoginServiceImpl implements LoginService {
             throw new DuplicateUserException("Email already registered");
         }
 
-        LoginModule user = new LoginModule();
-        user.setUsername(loginDTO.getUsername());
+        // Use mapper to create entity from DTO
+        LoginModule user = loginMapper.toEntity(loginDTO);
+
+        // Encode password before saving (security best practice)
         user.setPassword(passwordEncoder.encode(loginDTO.getPassword()));
-        user.setEmail(loginDTO.getEmail());
-        user.setRole(loginDTO.getRole() != null ? loginDTO.getRole() : "USER");
+
+        // Default role if not provided
+        if (user.getRole() == null) user.setRole("USER");
 
         loginRepository.save(user);
 
@@ -82,13 +86,7 @@ public class LoginServiceImpl implements LoginService {
         LoginModule user = loginRepository.findByUsername(username)
                 .orElseThrow(() -> new UserNotFoundException("User not found: " + username));
 
-        return ResponseEntity.ok(UserProfileDTO.builder()
-                .username(user.getUsername())
-                .email(user.getEmail())
-                .role(user.getRole())
-                .createdAt(user.getCreatedAt())
-                .lastLoginAt(user.getLastLoginAt())
-                .build());
+        return ResponseEntity.ok(loginMapper.toProfileDto(user));
     }
 
     @Override
@@ -102,12 +100,8 @@ public class LoginServiceImpl implements LoginService {
     @Override
     public ResponseEntity<Map<String, String>> changePassword(String username, String oldPassword, String newPassword) {
         // 1. Validation (Senior Move: use .isBlank() for cleaner code)
-        if (oldPassword == null || oldPassword.isBlank()) {
-            throw new IllegalArgumentException("Old password cannot be empty");
-        }
-        if (newPassword == null || newPassword.isBlank()) {
-            throw new IllegalArgumentException("New password cannot be empty");
-        }
+        if (isInvalid(oldPassword)) throw new IllegalArgumentException("Old password required");
+        if (isInvalid(newPassword)) throw new IllegalArgumentException("New password required");
 
         // 2. Fetch User
         LoginModule user = loginRepository.findByUsername(username)
@@ -125,10 +119,9 @@ public class LoginServiceImpl implements LoginService {
 
         // 5. Clean Return
         return ResponseEntity.ok(Map.of("message", "Password changed successfully"));
-
-        // NO MORE TRY-CATCH BLOCKS!
     }
 
+    // Private Helpers
     private void validateLoginInput(LoginDTO dto) {
         if (dto == null) throw new IllegalArgumentException("Data cannot be null");
         if (isInvalid(dto.getUsername())) throw new IllegalArgumentException("Username is required");
