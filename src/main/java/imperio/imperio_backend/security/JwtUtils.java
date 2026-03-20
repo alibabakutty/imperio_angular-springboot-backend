@@ -1,33 +1,30 @@
 package imperio.imperio_backend.security;
 
+import io.jsonwebtoken.*;
+import io.jsonwebtoken.security.Keys;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseCookie;
 import org.springframework.stereotype.Component;
-import io.jsonwebtoken.*;
-import io.jsonwebtoken.security.Keys;
 import java.nio.charset.StandardCharsets;
 import java.security.Key;
 import java.util.Date;
 
 @Component
 public class JwtUtils {
-    private final String jwtCookie = "app-auth-cookie";
+    // Standardize this name!
+    private final String jwtCookieName = "jwtToken";
+    private final String jwtSecret = "Welcome to Cloud9 Soft Technologies! EnsureThisIsLongEnough32Chars";
 
-    // Helper to get the security key object
-    private static Key getSigningKey() {
-        // Ensure this string is at least 32 characters long
-        String jwtSecret = "Welcome to Cloud9 Soft Technologies!";
-        byte[] keyBytes = jwtSecret.getBytes(StandardCharsets.UTF_8);
-
-        return Keys.hmacShaKeyFor(keyBytes);
+    private Key getSigningKey() {
+        return Keys.hmacShaKeyFor(jwtSecret.getBytes(StandardCharsets.UTF_8));
     }
 
     public String getJwtFromRequest(HttpServletRequest request) {
         Cookie[] cookies = request.getCookies();
         if (cookies != null) {
-            for(Cookie cookie : cookies) {
-                if ("jwtToken".equals(cookie.getName())) {
+            for (Cookie cookie : cookies) {
+                if (jwtCookieName.equals(cookie.getName())) {
                     return cookie.getValue();
                 }
             }
@@ -36,7 +33,7 @@ public class JwtUtils {
     }
 
     public ResponseCookie generateJwtCookie(String username) {
-        int jwtExpirationMs = 540000;
+        int jwtExpirationMs = 86400000; // 24 hours
 
         String jwt = Jwts.builder()
                 .setSubject(username)
@@ -45,28 +42,25 @@ public class JwtUtils {
                 .signWith(getSigningKey(), SignatureAlgorithm.HS256)
                 .compact();
 
-        return ResponseCookie.from(jwtCookie, jwt)
+        return ResponseCookie.from(jwtCookieName, jwt)
                 .path("/api")
-                .maxAge(1*60)
+                .maxAge(24 * 60 * 60)
                 .httpOnly(true)
-                .secure(false)
+                .secure(false) // Set true in production
                 .sameSite("Lax")
                 .build();
     }
 
     public ResponseCookie getCleanJwtCookie() {
-        return ResponseCookie.from(jwtCookie, null).path("/api").build();
+        return ResponseCookie.from(jwtCookieName, null).path("/api").build();
     }
 
     public boolean validateJwtToken(String authToken) {
         try {
-            Jwts.parserBuilder()
-                    .setSigningKey(getSigningKey())
-                    .build()
-                    .parseClaimsJws(authToken); // MUST BE parseClaimsJws
+            Jwts.parserBuilder().setSigningKey(getSigningKey()).build().parseClaimsJws(authToken);
             return true;
         } catch (Exception e) {
-            System.out.println("JWT Validation Error: " + e.getMessage());
+            System.err.println("JWT Validation Error: " + e.getMessage());
             return false;
         }
     }
@@ -75,7 +69,7 @@ public class JwtUtils {
         return Jwts.parserBuilder()
                 .setSigningKey(getSigningKey())
                 .build()
-                .parseClaimsJws(token) // MUST BE parseClaimsJws
+                .parseClaimsJws(token)
                 .getBody()
                 .getSubject();
     }
